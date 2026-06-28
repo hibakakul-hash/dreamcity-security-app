@@ -10,6 +10,7 @@ import AdminPanel from './pages/AdminPanel'
 import AddVisitor from './pages/AddVisitor'
 import PlateLookup from './pages/PlateLookup'
 import MyVehicles from './pages/MyVehicles'
+import ProfileSettings from './pages/ProfileSettings'
 import { supabase } from './lib/supabase'
 import { getProfile, signOut } from './lib/auth'
 
@@ -18,7 +19,6 @@ export default function App() {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Handle password reset redirect before auth check
   const isResetFlow = window.location.pathname === '/reset-password'
 
   const loadProfile = async (authUser) => {
@@ -64,7 +64,6 @@ export default function App() {
     setProfile(null)
   }
 
-  // Always allow reset-password route
   if (isResetFlow) return <ResetPassword />
 
   if (loading) {
@@ -89,6 +88,7 @@ export default function App() {
               <Route path="/add-visitor" element={<AddVisitor user={profile} />} />
               <Route path="/plate" element={<PlateLookup />} />
               <Route path="/log" element={<VisitorLog />} />
+              <Route path="/profile" element={<ProfileSettings user={profile} onProfileUpdate={setProfile} />} />
               {profile.role === 'admin' && <Route path="/admin" element={<AdminPanel />} />}
             </>
           ) : (
@@ -96,6 +96,7 @@ export default function App() {
               <Route path="/" element={<ResidentPortal user={profile} />} />
               <Route path="/vehicles" element={<MyVehicles user={profile} />} />
               <Route path="/log" element={<VisitorLog user={profile} />} />
+              <Route path="/profile" element={<ProfileSettings user={profile} onProfileUpdate={setProfile} />} />
             </>
           )}
           <Route path="*" element={<Navigate to="/" replace />} />

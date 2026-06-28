@@ -86,3 +86,53 @@ export async function updatePassword(newPassword) {
   const { error } = await supabase.auth.updateUser({ password: newPassword })
   if (error) throw error
 }
+
+export async function updatePhone(userId, newPhone, currentPassword) {
+  // Re-authenticate first to confirm identity
+  const { data: { user } } = await supabase.auth.getUser()
+  const currentEmail = user.email
+  const { error: authError } = await supabase.auth.signInWithPassword({
+    email: currentEmail,
+    password: currentPassword,
+  })
+  if (authError) throw new Error('Current password is incorrect')
+
+  // Check new phone not already taken
+  const newEmail = phoneToEmail(newPhone)
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('phone', newPhone.replace(/\D/g, ''))
+    .maybeSingle()
+  if (existing && existing.id !== userId) throw new Error('This phone number is already registered')
+
+  // Update auth email (internal mapping)
+  const { error: updateError } = await supabase.auth.updateUser({ email: newEmail })
+  if (updateError) throw updateError
+
+  // Update profile
+  const digits = newPhone.replace(/\D/g, '')
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({ phone: digits })
+    .eq('id', userId)
+  if (profileError) throw profileError
+}
+
+export async function updateProfile(userId, updates) {
+  const { error } = await supabase
+    .from('profiles')
+    .update(updates)
+    .eq('id', userId)
+  if (error) throw error
+}
+
+export async function fetchUnitMembers(unit) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, name, phone, role, created_at')
+    .eq('unit', unit)
+    .order('created_at')
+  if (error) throw error
+  return data
+}
