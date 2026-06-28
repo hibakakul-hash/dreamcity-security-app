@@ -121,7 +121,6 @@ export default function LoginPage({ onLogin }) {
                     >
                       <option value="resident">Resident</option>
                       <option value="security">Security Guard</option>
-                      <option value="admin">Admin</option>
                     </select>
                   </div>
                   {form.role === 'resident' && (

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, CheckCircle, Clock } from 'lucide-react'
 import { fetchPreApprovals, addPreApproval, deletePreApproval } from '../lib/db'
 import { mockPreApprovals } from '../lib/mockData'
+import PushToggle from '../components/PushToggle'
 
 const DEMO_MODE = !import.meta.env.VITE_SUPABASE_URL
 const PURPOSES = ['Guest', 'Delivery', 'Family', 'Service', 'Other']
@@ -75,6 +76,8 @@ export default function ResidentPortal({ user }) {
           <Plus size={16} /> Add
         </button>
       </div>
+
+      <PushToggle unit={user.unit} />
 
       {showForm && (
         <form onSubmit={handleAdd} className="bg-white rounded-2xl shadow-sm p-5 space-y-4 border border-blue-100">
