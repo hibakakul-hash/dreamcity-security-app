@@ -3,12 +3,13 @@ import { Shield, ArrowLeft, Mail } from 'lucide-react'
 import {
   signInWithPhone,
   signUpWithPhone,
+  signInWithRecoveryEmail,
   sendPasswordResetByPhone,
   sendPasswordResetByEmail,
 } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 
-const MODES = { login: 'login', signup: 'signup', forgot: 'forgot', recovery: 'recovery' }
+const MODES = { login: 'login', signup: 'signup', forgot: 'forgot', recovery: 'recovery', emailLogin: 'emailLogin' }
 
 export default function LoginPage({ onLogin }) {
   const [mode, setMode] = useState(MODES.login)
@@ -69,6 +70,10 @@ export default function LoginPage({ onLogin }) {
       } else if (mode === MODES.recovery) {
         await sendPasswordResetByEmail(form.forgotEmail)
         setSuccess('Reset link sent to your recovery email.')
+
+      } else if (mode === MODES.emailLogin) {
+        const user = await signInWithRecoveryEmail(form.forgotEmail, form.password)
+        onLogin(user)
       }
     } catch (err) {
       setError(err.message)
@@ -77,8 +82,10 @@ export default function LoginPage({ onLogin }) {
     }
   }
 
-  // ── Forgot / Recovery screens ──────────────────────────────────────────────
-  if (mode === MODES.forgot || mode === MODES.recovery) {
+  // ── Forgot / Recovery / Email Login screens ───────────────────────────────
+  if (mode === MODES.forgot || mode === MODES.recovery || mode === MODES.emailLogin) {
+    const isEmailLogin = mode === MODES.emailLogin
+
     return (
       <Wrapper>
         <button onClick={() => reset(MODES.login)} className="flex items-center gap-1 text-sm text-slate-500 hover:text-blue-600 mb-4 transition">
@@ -86,22 +93,26 @@ export default function LoginPage({ onLogin }) {
         </button>
 
         <h2 className="font-semibold text-slate-700 mb-1">
-          {mode === MODES.forgot ? 'Reset via Phone Number' : 'Reset via Recovery Email'}
+          {mode === MODES.forgot ? 'Reset via Phone Number'
+            : mode === MODES.emailLogin ? 'Sign in with Recovery Email'
+            : 'Reset via Recovery Email'}
         </h2>
         <p className="text-sm text-slate-500 mb-5">
           {mode === MODES.forgot
             ? 'Enter your registered phone number. A reset link will go to your recovery email.'
-            : "Enter the recovery email you set up when registering."}
+            : mode === MODES.emailLogin
+            ? 'Use your recovery email and password to sign in if you no longer have access to your phone number.'
+            : 'Enter the recovery email you set up when registering.'}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {mode === MODES.forgot ? (
             <PhoneInput
-            value={form.forgotPhone}
-            onChange={(v) => set('forgotPhone', v)}
-            countryCode={form.forgotCountryCode}
-            onCountryChange={(v) => set('forgotCountryCode', v)}
-          />
+              value={form.forgotPhone}
+              onChange={(v) => set('forgotPhone', v)}
+              countryCode={form.forgotCountryCode}
+              onCountryChange={(v) => set('forgotCountryCode', v)}
+            />
           ) : (
             <EmailInput
               label="Recovery Email"
@@ -111,18 +122,34 @@ export default function LoginPage({ onLogin }) {
             />
           )}
 
+          {isEmailLogin && (
+            <Field label="Password" required>
+              <input type="password" value={form.password}
+                onChange={(e) => set('password', e.target.value)}
+                placeholder="••••••••" className={inputCls} required minLength={6} />
+            </Field>
+          )}
+
           {error && <ErrorBox>{error}</ErrorBox>}
           {success && <SuccessBox>{success}</SuccessBox>}
 
           <Btn loading={loading} disabled={!!success}>
-            {mode === MODES.forgot ? 'Send Reset Link' : 'Send via Recovery Email'}
+            {mode === MODES.forgot ? 'Send Reset Link'
+              : mode === MODES.emailLogin ? 'Sign In'
+              : 'Send via Recovery Email'}
           </Btn>
 
           {mode === MODES.forgot && (
-            <button type="button" onClick={() => reset(MODES.recovery)}
-              className="w-full text-sm text-slate-500 hover:text-blue-600 transition text-center">
-              Lost your phone number? Use recovery email instead
-            </button>
+            <>
+              <button type="button" onClick={() => reset(MODES.emailLogin)}
+                className="w-full text-sm text-slate-500 hover:text-blue-600 transition text-center">
+                Have your recovery email? Sign in directly →
+              </button>
+              <button type="button" onClick={() => reset(MODES.recovery)}
+                className="w-full text-sm text-slate-400 hover:text-slate-600 transition text-center">
+                Forgot password? Reset via recovery email
+              </button>
+            </>
           )}
         </form>
       </Wrapper>
@@ -235,10 +262,16 @@ export default function LoginPage({ onLogin }) {
         </Btn>
 
         {mode === MODES.login && (
-          <button type="button" onClick={() => reset(MODES.forgot)}
-            className="w-full text-sm text-blue-600 hover:text-blue-800 transition text-center">
-            Forgot password?
-          </button>
+          <>
+            <button type="button" onClick={() => reset(MODES.forgot)}
+              className="w-full text-sm text-blue-600 hover:text-blue-800 transition text-center">
+              Forgot password?
+            </button>
+            <button type="button" onClick={() => reset(MODES.emailLogin)}
+              className="w-full text-sm text-slate-400 hover:text-slate-600 transition text-center">
+              Lost your phone number? Sign in with recovery email
+            </button>
+          </>
         )}
       </form>
     </Wrapper>

@@ -26,7 +26,14 @@ export async function signUpWithPhone({ phone, password, name, role, unit, recov
       data: { name, role, unit: unit || null, phone, recovery_email: recoveryEmail || null },
     },
   })
-  if (error) throw error
+  if (error) {
+    if (error.message?.toLowerCase().includes('already registered') ||
+        error.message?.toLowerCase().includes('already exists') ||
+        error.status === 422) {
+      throw new Error('This phone number is already registered. Try signing in instead.')
+    }
+    throw error
+  }
   return data.user
 }
 
