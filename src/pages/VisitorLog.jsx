@@ -1,6 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Search, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { fetchVisitors } from '../lib/db'
 import { mockVisitors } from '../lib/mockData'
+
+const DEMO_MODE = !import.meta.env.VITE_SUPABASE_URL
 
 function formatDate(iso) {
   return new Date(iso).toLocaleString('en-PK', {
@@ -9,24 +12,30 @@ function formatDate(iso) {
 }
 
 export default function VisitorLog({ user }) {
+  const [visitors, setVisitors] = useState(DEMO_MODE ? mockVisitors : [])
   const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(!DEMO_MODE)
 
-  const visitors = user?.role === 'resident'
-    ? mockVisitors.filter((v) => v.unit === user.unit)
-    : mockVisitors
+  useEffect(() => {
+    if (DEMO_MODE) return
+    fetchVisitors(user?.role === 'resident' ? user.unit : null)
+      .then(setVisitors)
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
 
-  const filtered = visitors.filter((v) =>
-    [v.visitor_name, v.unit, v.vehicle_number, v.purpose, v.resident_name]
-      .join(' ')
-      .toLowerCase()
-      .includes(search.toLowerCase())
-  )
+  const filtered = visitors.filter((v) => {
+    const matchesUnit = user?.role === 'resident' ? v.unit === user.unit : true
+    const matchesSearch = [v.visitor_name, v.unit, v.vehicle_number, v.purpose, v.resident_name]
+      .join(' ').toLowerCase().includes(search.toLowerCase())
+    return matchesUnit && matchesSearch
+  })
 
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-xl font-bold text-slate-800">Visitor Log</h2>
-        <p className="text-slate-500 text-sm">{filtered.length} records</p>
+        <p className="text-slate-500 text-sm">{loading ? 'Loading...' : `${filtered.length} records`}</p>
       </div>
 
       <div className="relative">
@@ -41,6 +50,10 @@ export default function VisitorLog({ user }) {
       </div>
 
       <div className="space-y-2">
+        {loading && <div className="text-center text-slate-400 py-12">Loading...</div>}
+        {!loading && filtered.length === 0 && (
+          <div className="text-center text-slate-400 py-12">No records found</div>
+        )}
         {filtered.map((v) => (
           <div key={v.id} className="bg-white rounded-xl shadow-sm p-4 flex items-center gap-4">
             <div className="shrink-0">
@@ -61,22 +74,15 @@ export default function VisitorLog({ user }) {
                 <div className="text-xs text-slate-400">{v.vehicle_number}</div>
               )}
             </div>
-            <span
-              className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${
-                v.status === 'approved'
-                  ? 'bg-green-100 text-green-700'
-                  : v.status === 'denied'
-                  ? 'bg-red-100 text-red-600'
-                  : 'bg-amber-100 text-amber-700'
-              }`}
-            >
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${
+              v.status === 'approved' ? 'bg-green-100 text-green-700'
+              : v.status === 'denied' ? 'bg-red-100 text-red-600'
+              : 'bg-amber-100 text-amber-700'
+            }`}>
               {v.status}
             </span>
           </div>
         ))}
-        {filtered.length === 0 && (
-          <div className="text-center text-slate-400 py-12">No records found</div>
-        )}
       </div>
     </div>
   )

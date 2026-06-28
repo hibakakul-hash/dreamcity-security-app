@@ -1,23 +1,46 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Trash2, Plus, UserCheck } from 'lucide-react'
+import { fetchResidents, addResident, deleteResident } from '../lib/db'
 import { mockResidents } from '../lib/mockData'
 
+const DEMO_MODE = !import.meta.env.VITE_SUPABASE_URL
+
 export default function AdminPanel() {
-  const [residents, setResidents] = useState(mockResidents)
+  const [residents, setResidents] = useState(DEMO_MODE ? mockResidents : [])
   const [form, setForm] = useState({ name: '', unit: '', phone: '' })
   const [showForm, setShowForm] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (DEMO_MODE) return
+    fetchResidents().then(setResidents).catch(console.error)
+  }, [])
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
-  const addResident = (e) => {
+  const handleAdd = async (e) => {
     e.preventDefault()
     if (!form.name || !form.unit) return
-    setResidents((prev) => [...prev, { id: Date.now(), ...form }])
+    setSaving(true)
+    if (DEMO_MODE) {
+      setResidents((prev) => [...prev, { id: Date.now(), ...form }])
+    } else {
+      try {
+        const saved = await addResident(form)
+        setResidents((prev) => [...prev, saved])
+      } catch (e) {
+        console.error(e)
+      }
+    }
     setForm({ name: '', unit: '', phone: '' })
     setShowForm(false)
+    setSaving(false)
   }
 
-  const remove = (id) => setResidents((prev) => prev.filter((r) => r.id !== id))
+  const remove = async (id) => {
+    setResidents((prev) => prev.filter((r) => r.id !== id))
+    if (!DEMO_MODE) await deleteResident(id).catch(console.error)
+  }
 
   return (
     <div className="space-y-4">
@@ -30,13 +53,12 @@ export default function AdminPanel() {
           onClick={() => setShowForm(!showForm)}
           className="flex items-center gap-1.5 bg-blue-700 hover:bg-blue-800 text-white text-sm font-medium px-4 py-2 rounded-xl transition"
         >
-          <Plus size={16} />
-          Add Resident
+          <Plus size={16} /> Add Resident
         </button>
       </div>
 
       {showForm && (
-        <form onSubmit={addResident} className="bg-white rounded-2xl shadow-sm p-5 space-y-4 border border-blue-100">
+        <form onSubmit={handleAdd} className="bg-white rounded-2xl shadow-sm p-5 space-y-4 border border-blue-100">
           <h3 className="font-semibold text-slate-700">New Resident</h3>
           {[
             { key: 'name', label: 'Full Name', placeholder: 'e.g. Sara Ali', required: true },
@@ -60,9 +82,10 @@ export default function AdminPanel() {
           <div className="flex gap-2">
             <button
               type="submit"
-              className="flex-1 bg-blue-700 hover:bg-blue-800 text-white font-semibold py-2.5 rounded-xl transition"
+              disabled={saving}
+              className="flex-1 bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl transition"
             >
-              Save Resident
+              {saving ? 'Saving...' : 'Save Resident'}
             </button>
             <button
               type="button"
@@ -87,10 +110,7 @@ export default function AdminPanel() {
                 Unit {r.unit}{r.phone ? ` · ${r.phone}` : ''}
               </div>
             </div>
-            <button
-              onClick={() => remove(r.id)}
-              className="text-slate-300 hover:text-red-400 transition"
-            >
+            <button onClick={() => remove(r.id)} className="text-slate-300 hover:text-red-400 transition">
               <Trash2 size={18} />
             </button>
           </div>

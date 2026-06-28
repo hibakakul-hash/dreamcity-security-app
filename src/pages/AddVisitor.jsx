@@ -1,26 +1,47 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { fetchResidents, addVisitor } from '../lib/db'
 import { mockResidents } from '../lib/mockData'
 
+const DEMO_MODE = !import.meta.env.VITE_SUPABASE_URL
 const PURPOSES = ['Guest', 'Delivery', 'Family', 'Service', 'Other']
 
-export default function AddVisitor() {
+export default function AddVisitor({ user }) {
   const navigate = useNavigate()
-  const [form, setForm] = useState({
-    visitor_name: '',
-    vehicle_number: '',
-    purpose: 'Guest',
-    unit: '',
-  })
+  const [residents, setResidents] = useState(DEMO_MODE ? mockResidents : [])
+  const [form, setForm] = useState({ visitor_name: '', vehicle_number: '', purpose: 'Guest', unit: '' })
   const [submitted, setSubmitted] = useState(false)
+  const [saving, setSaving] = useState(false)
 
-  const resident = mockResidents.find((r) => r.unit === form.unit)
+  useEffect(() => {
+    if (DEMO_MODE) return
+    fetchResidents().then(setResidents).catch(console.error)
+  }, [])
 
-  const set = (key, val) => setForm((f) => ({ ...f, [key]: val }))
+  const resident = residents.find((r) => r.unit === form.unit)
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.visitor_name || !form.unit) return
+    setSaving(true)
+    if (!DEMO_MODE) {
+      try {
+        await addVisitor({
+          visitor_name: form.visitor_name,
+          vehicle_number: form.vehicle_number,
+          purpose: form.purpose,
+          unit: form.unit,
+          resident_name: resident?.name || '',
+          logged_by: user?.name || 'Security',
+          status: 'pending',
+        })
+      } catch (e) {
+        console.error(e)
+        setSaving(false)
+        return
+      }
+    }
     setSubmitted(true)
     setTimeout(() => navigate('/'), 1500)
   }
@@ -72,15 +93,13 @@ export default function AddVisitor() {
             required
           >
             <option value="">Select unit...</option>
-            {mockResidents.map((r) => (
-              <option key={r.id} value={r.unit}>
-                {r.unit} · {r.name}
-              </option>
+            {residents.map((r) => (
+              <option key={r.id} value={r.unit}>{r.unit} · {r.name}</option>
             ))}
           </select>
           {resident && (
             <p className="text-xs text-slate-500 mt-1">
-              Resident: {resident.name} · {resident.phone}
+              Resident: {resident.name}{resident.phone ? ` · ${resident.phone}` : ''}
             </p>
           )}
         </div>
@@ -120,9 +139,10 @@ export default function AddVisitor() {
 
         <button
           type="submit"
-          className="w-full bg-blue-700 hover:bg-blue-800 text-white font-semibold py-3 rounded-xl transition shadow mt-2"
+          disabled={saving}
+          className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition shadow mt-2"
         >
-          Log Visitor
+          {saving ? 'Saving...' : 'Log Visitor'}
         </button>
       </form>
     </div>
