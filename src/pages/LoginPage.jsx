@@ -16,7 +16,7 @@ export default function LoginPage({ onLogin }) {
     phone: '', password: '', confirmPassword: '',
     name: '', unit: '', role: 'resident',
     recoveryEmail: '', forgotPhone: '', forgotEmail: '',
-    countryCode: '92', forgotCountryCode: '92',
+    countryCode: '91', forgotCountryCode: '91',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -241,7 +241,6 @@ function Field({ label, required, children }) {
 }
 
 const COUNTRY_CODES = [
-  { code: '92',  flag: '🇵🇰', label: 'PK' },
   { code: '91',  flag: '🇮🇳', label: 'IN' },
   { code: '971', flag: '🇦🇪', label: 'AE' },
   { code: '966', flag: '🇸🇦', label: 'SA' },
