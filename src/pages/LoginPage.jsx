@@ -16,6 +16,7 @@ export default function LoginPage({ onLogin }) {
     phone: '', password: '', confirmPassword: '',
     name: '', unit: '', role: 'resident',
     recoveryEmail: '', forgotPhone: '', forgotEmail: '',
+    countryCode: '92', forgotCountryCode: '92',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -30,15 +31,18 @@ export default function LoginPage({ onLogin }) {
     setSuccess('')
     setLoading(true)
     try {
+      const fullPhone = form.countryCode + form.phone.replace(/^0+/, '')
+      const fullForgotPhone = form.forgotCountryCode + form.forgotPhone.replace(/^0+/, '')
+
       if (mode === MODES.login) {
-        const user = await signInWithPhone(form.phone, form.password)
+        const user = await signInWithPhone(fullPhone, form.password)
         onLogin(user)
 
       } else if (mode === MODES.signup) {
         if (form.password !== form.confirmPassword) throw new Error('Passwords do not match')
         if (form.password.length < 6) throw new Error('Password must be at least 6 characters')
         const user = await signUpWithPhone({
-          phone: form.phone,
+          phone: fullPhone,
           password: form.password,
           name: form.name,
           role: form.role,
@@ -48,7 +52,7 @@ export default function LoginPage({ onLogin }) {
         onLogin(user)
 
       } else if (mode === MODES.forgot) {
-        await sendPasswordResetByPhone(form.forgotPhone)
+        await sendPasswordResetByPhone(fullForgotPhone)
         setSuccess('Reset link sent! Check your recovery email.')
 
       } else if (mode === MODES.recovery) {
@@ -81,7 +85,12 @@ export default function LoginPage({ onLogin }) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {mode === MODES.forgot ? (
-            <PhoneInput value={form.forgotPhone} onChange={(v) => set('forgotPhone', v)} />
+            <PhoneInput
+            value={form.forgotPhone}
+            onChange={(v) => set('forgotPhone', v)}
+            countryCode={form.forgotCountryCode}
+            onCountryChange={(v) => set('forgotCountryCode', v)}
+          />
           ) : (
             <EmailInput
               label="Recovery Email"
@@ -148,7 +157,13 @@ export default function LoginPage({ onLogin }) {
           </>
         )}
 
-        <PhoneInput value={form.phone} onChange={(v) => set('phone', v)} required />
+        <PhoneInput
+          value={form.phone}
+          onChange={(v) => set('phone', v)}
+          countryCode={form.countryCode}
+          onCountryChange={(v) => set('countryCode', v)}
+          required
+        />
 
         <Field label="Password" required>
           <input type="password" value={form.password} onChange={(e) => set('password', e.target.value)}
@@ -225,18 +240,37 @@ function Field({ label, required, children }) {
   )
 }
 
-function PhoneInput({ value, onChange, required }) {
+const COUNTRY_CODES = [
+  { code: '92',  flag: '🇵🇰', label: 'PK' },
+  { code: '91',  flag: '🇮🇳', label: 'IN' },
+  { code: '971', flag: '🇦🇪', label: 'AE' },
+  { code: '966', flag: '🇸🇦', label: 'SA' },
+  { code: '44',  flag: '🇬🇧', label: 'UK' },
+  { code: '1',   flag: '🇺🇸', label: 'US' },
+  { code: '61',  flag: '🇦🇺', label: 'AU' },
+  { code: '49',  flag: '🇩🇪', label: 'DE' },
+]
+
+function PhoneInput({ value, onChange, countryCode, onCountryChange, required }) {
   return (
     <Field label="Mobile Number" required={required}>
       <div className="flex gap-2">
-        <span className="flex items-center px-3 bg-slate-100 border border-slate-300 rounded-xl text-sm text-slate-600 shrink-0">
-          <Phone size={14} className="mr-1" /> +92
-        </span>
+        <select
+          value={countryCode}
+          onChange={(e) => onCountryChange(e.target.value)}
+          className="shrink-0 border border-slate-300 rounded-xl px-2 py-2.5 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          {COUNTRY_CODES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.flag} +{c.code}
+            </option>
+          ))}
+        </select>
         <input
           type="tel"
           value={value}
-          onChange={(e) => onChange(e.target.value.replace(/\D/g, '').slice(0, 11))}
-          placeholder="03001234567"
+          onChange={(e) => onChange(e.target.value.replace(/\D/g, '').slice(0, 13))}
+          placeholder="3001234567"
           className={inputCls}
           required={required}
         />

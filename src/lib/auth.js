@@ -5,10 +5,9 @@ import { supabase } from './supabase'
 const DOMAIN = 'dreamcity.app'
 
 export function phoneToEmail(phone) {
-  // Normalize: remove spaces, dashes, leading zeros, add country code
+  // phone is already a full international number e.g. "923001234567" or "919876543210"
   const digits = phone.replace(/\D/g, '')
-  const normalized = digits.startsWith('92') ? digits : digits.startsWith('0') ? '92' + digits.slice(1) : '92' + digits
-  return `${normalized}@${DOMAIN}`
+  return `${digits}@${DOMAIN}`
 }
 
 export async function signInWithPhone(phone, password) {
