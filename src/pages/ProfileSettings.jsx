@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { User, Phone, Mail, Lock, Users, CheckCircle, ChevronRight, X } from 'lucide-react'
+import { User, Phone, Mail, Lock, Users, CheckCircle, ChevronRight, X, Bell } from 'lucide-react'
 import { updatePhone, updatePassword, updateProfile, fetchUnitMembers } from '../lib/auth'
 import { supabase } from '../lib/supabase'
+import PushToggle from '../components/PushToggle'
 
 export default function ProfileSettings({ user, onProfileUpdate }) {
   const [section, setSection] = useState(null) // 'name' | 'phone' | 'email' | 'password'
@@ -124,12 +125,20 @@ export default function ProfileSettings({ user, onProfileUpdate }) {
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden divide-y divide-slate-100">
         <SettingRow icon={User} label="Full Name" value={user.name} onClick={() => openSection('name')} />
         <SettingRow icon={Phone} label="Mobile Number"
-          value={user.phone ? `0${user.phone.slice(2)}` : 'Not set'}
+          value={user.phone ? `+${user.phone}` : 'Not set'}
           onClick={() => openSection('phone')} />
-        <SettingRow icon={Mail} label="Recovery Email"
-          value={user.recovery_email || 'Not set'}
-          onClick={() => openSection('email')} />
         <SettingRow icon={Lock} label="Password" value="••••••••" onClick={() => openSection('password')} />
+      </div>
+
+      {/* Notifications */}
+      <div className="bg-white rounded-2xl shadow-sm p-4 space-y-2">
+        <div className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1">
+          <Bell size={15} /> Notifications
+        </div>
+        <PushToggle unit={user.unit} />
+        <p className="text-xs text-slate-400">
+          Must be installed via "Add to Home Screen" on iOS for notifications to work.
+        </p>
       </div>
 
       {/* Expandable edit forms */}
