@@ -2,18 +2,24 @@ import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
+import ResetPassword from './pages/ResetPassword'
 import SecurityGate from './pages/SecurityGate'
 import VisitorLog from './pages/VisitorLog'
 import ResidentPortal from './pages/ResidentPortal'
 import AdminPanel from './pages/AdminPanel'
 import AddVisitor from './pages/AddVisitor'
+import PlateLookup from './pages/PlateLookup'
+import MyVehicles from './pages/MyVehicles'
 import { supabase } from './lib/supabase'
 import { getProfile, signOut } from './lib/auth'
 
 export default function App() {
-  const [user, setUser] = useState(null)   // Supabase auth user
-  const [profile, setProfile] = useState(null) // { role, name, unit }
+  const [user, setUser] = useState(null)
+  const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+
+  // Handle password reset redirect before auth check
+  const isResetFlow = window.location.pathname === '/reset-password'
 
   const loadProfile = async (authUser) => {
     try {
@@ -25,7 +31,6 @@ export default function App() {
   }
 
   useEffect(() => {
-    // Check existing session on mount
     supabase.auth.getSession().then(({ data }) => {
       if (data.session?.user) {
         setUser(data.session.user)
@@ -35,7 +40,6 @@ export default function App() {
       }
     })
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setUser(session.user)
@@ -60,6 +64,9 @@ export default function App() {
     setProfile(null)
   }
 
+  // Always allow reset-password route
+  if (isResetFlow) return <ResetPassword />
+
   if (loading) {
     return (
       <div className="min-h-screen bg-blue-900 flex items-center justify-center">
@@ -80,12 +87,14 @@ export default function App() {
             <>
               <Route path="/" element={<SecurityGate user={profile} />} />
               <Route path="/add-visitor" element={<AddVisitor user={profile} />} />
+              <Route path="/plate" element={<PlateLookup />} />
               <Route path="/log" element={<VisitorLog />} />
               {profile.role === 'admin' && <Route path="/admin" element={<AdminPanel />} />}
             </>
           ) : (
             <>
               <Route path="/" element={<ResidentPortal user={profile} />} />
+              <Route path="/vehicles" element={<MyVehicles user={profile} />} />
               <Route path="/log" element={<VisitorLog user={profile} />} />
             </>
           )}

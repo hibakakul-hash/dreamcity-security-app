@@ -68,3 +68,34 @@ export async function deleteResident(id) {
   const { error } = await supabase.from('residents').delete().eq('id', id)
   if (error) throw error
 }
+
+// Vehicles
+export async function fetchVehicles(unit = null) {
+  let query = supabase.from('vehicles').select('*').order('created_at', { ascending: false })
+  if (unit) query = query.eq('unit', unit)
+  const { data, error } = await query
+  if (error) throw error
+  return data
+}
+
+export async function fetchVehicleByPlate(plate) {
+  const clean = plate.replace(/\s/g, '').toUpperCase()
+  const { data, error } = await supabase
+    .from('vehicles')
+    .select('*, residents(name, phone)')
+    .ilike('plate_number', clean)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+export async function addVehicle(vehicle) {
+  const { data, error } = await supabase.from('vehicles').insert([vehicle]).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteVehicle(id) {
+  const { error } = await supabase.from('vehicles').delete().eq('id', id)
+  if (error) throw error
+}

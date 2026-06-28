@@ -66,3 +66,11 @@ export const mockResidents = [
   { id: 4, name: 'Nadia Hussain', unit: 'A-104', phone: '0303-4567890' },
   { id: 5, name: 'Kamran Iqbal', unit: 'D-401', phone: '0304-5678901' },
 ]
+
+export const mockVehicles = [
+  { id: 1, unit: 'A-201', resident_name: 'Sara Ali',      plate_number: 'LEA-1234', make: 'Toyota',  model: 'Corolla',  color: 'White'  },
+  { id: 2, unit: 'B-105', resident_name: 'Usman Malik',   plate_number: 'LEB-5678', make: 'Honda',   model: 'Civic',    color: 'Silver' },
+  { id: 3, unit: 'C-302', resident_name: 'Bilal Sheikh',  plate_number: 'LEC-9101', make: 'Suzuki',  model: 'Alto',     color: 'Red'    },
+  { id: 4, unit: 'A-104', resident_name: 'Nadia Hussain', plate_number: 'LED-1121', make: 'Kia',     model: 'Sportage', color: 'Black'  },
+  { id: 5, unit: 'D-401', resident_name: 'Kamran Iqbal',  plate_number: 'LEE-3141', make: 'Toyota',  model: 'Fortuner', color: 'Grey'   },
+]
