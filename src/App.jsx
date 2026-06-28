@@ -138,7 +138,7 @@ export default function App() {
               {(profile.role === 'security' || profile.role === 'admin') && <Route path="/plate" element={<PlateLookup />} />}
               <Route path="/log" element={<VisitorLog />} />
               <Route path="/profile" element={<ProfileSettings user={profile} onProfileUpdate={setProfile} />} />
-              {profile.role === 'admin' && <Route path="/admin" element={<AdminDashboard />} />}
+              {profile.role === 'admin' && <Route path="/admin" element={<AdminDashboard user={profile} />} />}
               {profile.role === 'admin' && <Route path="/admin/residents" element={<AdminPanel />} />}
               {profile.role === 'household_admin' && <Route path="/unit" element={<HouseholdAdminPanel user={profile} />} />}
             </>

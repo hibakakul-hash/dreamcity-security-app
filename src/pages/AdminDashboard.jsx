@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Users, Home, Shield, Clock, CheckCircle, XCircle, UserX, UserCheck, ChevronDown, ChevronUp, UserPlus, Search, Download, Filter } from 'lucide-react'
+import { Users, Home, Shield, Clock, CheckCircle, XCircle, UserX, UserCheck, ChevronDown, ChevronUp, UserPlus, Search, Download, Filter, Activity, ShieldCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 function formatDate(iso) {
@@ -19,16 +19,23 @@ function timeAgo(iso) {
   return `${Math.floor(diff / 1440)}d ago`
 }
 
-export default function AdminDashboard() {
+export default function AdminDashboard({ user }) {
   const [stats, setStats] = useState({ units: 0, accounts: 0, todayVisitors: 0, pending: 0 })
-  const [units, setUnits] = useState([])       // per-unit registration breakdown
-  const [auditLog, setAuditLog] = useState([]) // decided visitors
-  const [accounts, setAccounts] = useState([]) // all profiles
-  const [pendingAccounts, setPendingAccounts] = useState([]) // awaiting approval
-  const [tab, setTab] = useState('overview')   // 'overview' | 'units' | 'audit' | 'accounts' | 'approvals'
+  const [units, setUnits] = useState([])
+  const [auditLog, setAuditLog] = useState([])
+  const [accounts, setAccounts] = useState([])
+  const [pendingAccounts, setPendingAccounts] = useState([])
+  const [adminLogs, setAdminLogs] = useState([])
+  const [tab, setTab] = useState('overview')
   const [expandedUnit, setExpandedUnit] = useState(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(null)
+
+  // New admin form
+  const [showNewAdmin, setShowNewAdmin] = useState(false)
+  const [newAdmin, setNewAdmin] = useState({ name: '', phone: '', countryCode: '91', password: '' })
+  const [newAdminLoading, setNewAdminLoading] = useState(false)
+  const [newAdminError, setNewAdminError] = useState('')
 
   // Audit log filters
   const [auditSearch, setAuditSearch] = useState('')
@@ -82,8 +89,15 @@ export default function AdminDashboard() {
       // All accounts
       setAccounts(profiles || [])
 
-      // Pending approval accounts — residents are approved by HA, not SuperAdmin
       setPendingAccounts(profiles?.filter(p => p.is_pending && p.role !== 'resident') || [])
+
+      // Admin activity log
+      const { data: logs } = await supabase
+        .from('admin_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200)
+      setAdminLogs(logs || [])
     } catch (e) {
       console.error(e)
     } finally {
@@ -99,9 +113,23 @@ export default function AdminDashboard() {
       await supabase.from('profiles')
         .update({ is_active: !profile.is_active })
         .eq('id', profile.id)
+      await logAction(profile.is_active ? 'suspended_account' : 'restored_account', profile)
       await load()
     } catch (e) { console.error(e) }
     finally { setActionLoading(null) }
+  }
+
+  const logAction = async (action, target, notes = '') => {
+    await supabase.from('admin_logs').insert({
+      admin_id: user?.id,
+      admin_name: user?.name || 'SuperAdmin',
+      action,
+      target_id: target?.id || null,
+      target_name: target?.name || null,
+      target_unit: target?.unit || null,
+      target_role: target?.role || null,
+      notes: notes || null,
+    })
   }
 
   const approveAccount = async (profile) => {
@@ -127,6 +155,7 @@ export default function AdminDashboard() {
       await supabase.from('profiles')
         .update({ is_pending: false, is_active: true })
         .eq('id', profile.id)
+      await logAction('approved_account', profile)
       await load()
     } catch (e) { console.error(e) }
     finally { setActionLoading(null) }
@@ -135,11 +164,38 @@ export default function AdminDashboard() {
   const rejectAccount = async (profile) => {
     setActionLoading(profile.id + '_reject')
     try {
+      await logAction('rejected_account', profile)
       await supabase.from('profiles').delete().eq('id', profile.id)
-      await supabase.auth.admin?.deleteUser(profile.id).catch(() => {})
       await load()
     } catch (e) { console.error(e) }
     finally { setActionLoading(null) }
+  }
+
+  const createAdminAccount = async (e) => {
+    e.preventDefault()
+    setNewAdminError('')
+    setNewAdminLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const phone = newAdmin.countryCode + newAdmin.phone.replace(/^0+/, '')
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-admin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ phone, password: newAdmin.password, name: newAdmin.name, requesterId: user?.id }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to create admin')
+      setShowNewAdmin(false)
+      setNewAdmin({ name: '', phone: '', countryCode: '91', password: '' })
+      await load()
+    } catch (err) {
+      setNewAdminError(err.message)
+    } finally {
+      setNewAdminLoading(false)
+    }
   }
 
   const filteredAuditLog = useMemo(() => {
@@ -183,6 +239,8 @@ export default function AdminDashboard() {
     { key: 'units', label: 'Units' },
     { key: 'audit', label: 'Audit Log' },
     { key: 'accounts', label: 'Accounts' },
+    { key: 'activity', label: 'Activity' },
+    { key: 'admins', label: 'Admins' },
   ]
 
   return (
@@ -497,6 +555,126 @@ export default function AdminDashboard() {
                       {actionLoading === a.id ? '...' : a.is_active
                         ? <><UserX size={13} /> Suspend</>
                         : <><UserCheck size={13} /> Restore</>}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {/* ADMIN ACTIVITY */}
+          {tab === 'activity' && (
+            <div className="space-y-2">
+              <p className="text-xs text-slate-500 px-1">{adminLogs.length} admin actions recorded</p>
+              {adminLogs.length === 0 && (
+                <div className="text-center text-slate-400 py-12 space-y-2">
+                  <Activity size={32} className="mx-auto opacity-30" />
+                  <p className="text-sm">No admin activity yet</p>
+                </div>
+              )}
+              {adminLogs.map(log => (
+                <div key={log.id} className="bg-white rounded-xl shadow-sm p-4 flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                    {log.admin_name?.[0]?.toUpperCase() || 'A'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-slate-800">
+                      <strong>{log.admin_name}</strong>{' '}
+                      <span className={`font-medium ${
+                        log.action.includes('approved') || log.action.includes('restored') ? 'text-green-600'
+                        : log.action.includes('rejected') || log.action.includes('suspended') ? 'text-red-500'
+                        : 'text-blue-600'
+                      }`}>{log.action.replace(/_/g, ' ')}</span>
+                      {log.target_name && <> · <span className="text-slate-600">{log.target_name}</span></>}
+                    </div>
+                    <div className="text-xs text-slate-400 mt-0.5 space-x-2">
+                      {log.target_unit && <span>Unit {log.target_unit}</span>}
+                      {log.target_role && <span className="capitalize">· {log.target_role.replace('_', ' ')}</span>}
+                      {log.notes && <span>· {log.notes}</span>}
+                      <span>· {timeAgo(log.created_at)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ADMIN MANAGEMENT */}
+          {tab === 'admins' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between px-1">
+                <p className="text-xs text-slate-500">
+                  {accounts.filter(a => a.role === 'admin').length} / 3 SuperAdmin accounts
+                </p>
+                {accounts.filter(a => a.role === 'admin' && a.is_active).length < 3 && (
+                  <button onClick={() => setShowNewAdmin(v => !v)}
+                    className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 transition">
+                    <ShieldCheck size={14} /> Add SuperAdmin
+                  </button>
+                )}
+              </div>
+
+              {showNewAdmin && (
+                <form onSubmit={createAdminAccount} className="bg-white rounded-xl shadow-sm p-4 space-y-3 border border-blue-100">
+                  <h3 className="font-semibold text-slate-700 text-sm">New SuperAdmin Account</h3>
+                  <input
+                    type="text" placeholder="Full name" required value={newAdmin.name}
+                    onChange={e => setNewAdmin(v => ({ ...v, name: e.target.value }))}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="flex gap-2">
+                    <select value={newAdmin.countryCode} onChange={e => setNewAdmin(v => ({ ...v, countryCode: e.target.value }))}
+                      className="shrink-0 border border-slate-300 rounded-xl px-2 py-2 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      {[['91','🇮🇳'],['971','🇦🇪'],['966','🇸🇦'],['44','🇬🇧'],['1','🇺🇸']].map(([c,f]) => (
+                        <option key={c} value={c}>{f} +{c}</option>
+                      ))}
+                    </select>
+                    <input type="tel" placeholder="Phone number" required value={newAdmin.phone}
+                      onChange={e => setNewAdmin(v => ({ ...v, phone: e.target.value.replace(/\D/g,'').slice(0,13) }))}
+                      className="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <input type="password" placeholder="Password (min 6 chars)" required minLength={6}
+                    value={newAdmin.password}
+                    onChange={e => setNewAdmin(v => ({ ...v, password: e.target.value }))}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  {newAdminError && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{newAdminError}</p>}
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={newAdminLoading}
+                      className="flex-1 bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold py-2 rounded-xl disabled:opacity-50 transition">
+                      {newAdminLoading ? 'Creating...' : 'Create Account'}
+                    </button>
+                    <button type="button" onClick={() => { setShowNewAdmin(false); setNewAdminError('') }}
+                      className="flex-1 border border-slate-200 text-slate-600 text-sm py-2 rounded-xl hover:bg-slate-50 transition">
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {accounts.filter(a => a.role === 'admin').map(a => (
+                <div key={a.id} className={`bg-white rounded-xl shadow-sm p-4 flex items-center gap-3 ${!a.is_active ? 'opacity-60' : ''}`}>
+                  <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-sm font-bold shrink-0">
+                    {a.name?.[0]?.toUpperCase() || 'A'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-slate-800 text-sm">{a.name}</span>
+                      {a.id === user?.id && <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">You</span>}
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full ${a.is_active ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-400'}`}>
+                        {a.is_active ? 'Active' : 'Suspended'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      {a.phone ? `+${a.phone}` : '—'} · SuperAdmin · Joined {timeAgo(a.created_at)}
+                    </div>
+                  </div>
+                  {a.id !== user?.id && (
+                    <button onClick={() => toggleAccount(a)} disabled={actionLoading === a.id}
+                      className={`shrink-0 flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border transition ${
+                        a.is_active ? 'border-red-200 text-red-500 hover:bg-red-50' : 'border-green-200 text-green-600 hover:bg-green-50'
+                      }`}>
+                      {actionLoading === a.id ? '...' : a.is_active ? <><UserX size={13} /> Suspend</> : <><UserCheck size={13} /> Restore</>}
                     </button>
                   )}
                 </div>
