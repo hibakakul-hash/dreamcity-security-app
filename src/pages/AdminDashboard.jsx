@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Users, Home, Shield, Clock, CheckCircle, XCircle, UserX, UserCheck, ChevronDown, ChevronUp, UserPlus } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Users, Home, Shield, Clock, CheckCircle, XCircle, UserX, UserCheck, ChevronDown, ChevronUp, UserPlus, Search, Download, Filter } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 function formatDate(iso) {
@@ -29,6 +29,13 @@ export default function AdminDashboard() {
   const [expandedUnit, setExpandedUnit] = useState(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(null)
+
+  // Audit log filters
+  const [auditSearch, setAuditSearch] = useState('')
+  const [auditStatus, setAuditStatus] = useState('all')   // 'all' | 'approved' | 'denied'
+  const [auditUnit, setAuditUnit] = useState('')
+  const [auditFrom, setAuditFrom] = useState('')
+  const [auditTo, setAuditTo] = useState('')
 
   const load = async () => {
     setLoading(true)
@@ -134,6 +141,41 @@ export default function AdminDashboard() {
     } catch (e) { console.error(e) }
     finally { setActionLoading(null) }
   }
+
+  const filteredAuditLog = useMemo(() => {
+    const q = auditSearch.toLowerCase()
+    return auditLog.filter(v => {
+      if (auditStatus !== 'all' && v.status !== auditStatus) return false
+      if (auditUnit && v.unit !== auditUnit) return false
+      if (auditFrom && new Date(v.approved_at || v.created_at) < new Date(auditFrom)) return false
+      if (auditTo && new Date(v.approved_at || v.created_at) > new Date(auditTo + 'T23:59:59')) return false
+      if (q && ![v.visitor_name, v.unit, v.purpose, v.decided_by_name, v.vehicle_number]
+        .filter(Boolean).some(s => s.toLowerCase().includes(q))) return false
+      return true
+    })
+  }, [auditLog, auditSearch, auditStatus, auditUnit, auditFrom, auditTo])
+
+  const exportCSV = () => {
+    const rows = [
+      ['Visitor', 'Unit', 'Purpose', 'Status', 'Decided By', 'Date', 'Vehicle'],
+      ...filteredAuditLog.map(v => [
+        v.visitor_name, v.unit, v.purpose, v.status,
+        v.decided_by_name || 'Security',
+        formatDate(v.approved_at || v.created_at),
+        v.vehicle_number || '',
+      ]),
+    ]
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `dreamcity-audit-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const auditUnits = useMemo(() => [...new Set(auditLog.map(v => v.unit).filter(Boolean))].sort(), [auditLog])
 
   const tabs = [
     { key: 'overview', label: 'Overview' },
@@ -315,12 +357,71 @@ export default function AdminDashboard() {
 
           {/* AUDIT LOG */}
           {tab === 'audit' && (
-            <div className="space-y-2">
-              <p className="text-xs text-slate-500 px-1">{auditLog.length} decided requests</p>
-              {auditLog.length === 0 && (
-                <div className="text-center text-slate-400 py-12">No decisions recorded yet</div>
+            <div className="space-y-3">
+              {/* Search bar */}
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={auditSearch}
+                  onChange={e => setAuditSearch(e.target.value)}
+                  placeholder="Search visitor, unit, purpose, decided by…"
+                  className="w-full border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Filters row */}
+              <div className="bg-white rounded-xl shadow-sm p-3 space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                  <Filter size={13} /> Filters
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <select value={auditStatus} onChange={e => setAuditStatus(e.target.value)}
+                    className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400">
+                    <option value="all">All statuses</option>
+                    <option value="approved">Approved only</option>
+                    <option value="denied">Denied only</option>
+                  </select>
+                  <select value={auditUnit} onChange={e => setAuditUnit(e.target.value)}
+                    className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400">
+                    <option value="">All units</option>
+                    {auditUnits.map(u => <option key={u} value={u}>Unit {u}</option>)}
+                  </select>
+                  <div>
+                    <label className="text-xs text-slate-400 mb-0.5 block">From</label>
+                    <input type="date" value={auditFrom} onChange={e => setAuditFrom(e.target.value)}
+                      className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 mb-0.5 block">To</label>
+                    <input type="date" value={auditTo} onChange={e => setAuditTo(e.target.value)}
+                      className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  </div>
+                </div>
+                {(auditSearch || auditStatus !== 'all' || auditUnit || auditFrom || auditTo) && (
+                  <button onClick={() => { setAuditSearch(''); setAuditStatus('all'); setAuditUnit(''); setAuditFrom(''); setAuditTo('') }}
+                    className="text-xs text-blue-600 hover:underline">
+                    Clear all filters
+                  </button>
+                )}
+              </div>
+
+              {/* Results bar + export */}
+              <div className="flex items-center justify-between px-1">
+                <p className="text-xs text-slate-500">
+                  {filteredAuditLog.length} of {auditLog.length} records
+                </p>
+                <button onClick={exportCSV} disabled={filteredAuditLog.length === 0}
+                  className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 disabled:opacity-40 transition">
+                  <Download size={13} /> Export CSV
+                </button>
+              </div>
+
+              {filteredAuditLog.length === 0 && (
+                <div className="text-center text-slate-400 py-12">No records match your filters</div>
               )}
-              {auditLog.map(v => (
+
+              {filteredAuditLog.map(v => (
                 <div key={v.id} className="bg-white rounded-xl shadow-sm p-4 space-y-1">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
