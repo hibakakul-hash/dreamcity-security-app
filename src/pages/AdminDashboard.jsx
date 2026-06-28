@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Users, Home, Shield, Clock, CheckCircle, XCircle, UserX, UserCheck, ChevronDown, ChevronUp } from 'lucide-react'
+import { Users, Home, Shield, Clock, CheckCircle, XCircle, UserX, UserCheck, ChevronDown, ChevronUp, UserPlus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 function formatDate(iso) {
@@ -24,7 +24,8 @@ export default function AdminDashboard() {
   const [units, setUnits] = useState([])       // per-unit registration breakdown
   const [auditLog, setAuditLog] = useState([]) // decided visitors
   const [accounts, setAccounts] = useState([]) // all profiles
-  const [tab, setTab] = useState('overview')   // 'overview' | 'units' | 'audit' | 'accounts'
+  const [pendingAccounts, setPendingAccounts] = useState([]) // awaiting approval
+  const [tab, setTab] = useState('overview')   // 'overview' | 'units' | 'audit' | 'accounts' | 'approvals'
   const [expandedUnit, setExpandedUnit] = useState(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(null)
@@ -73,6 +74,9 @@ export default function AdminDashboard() {
 
       // All accounts
       setAccounts(profiles || [])
+
+      // Pending approval accounts
+      setPendingAccounts(profiles?.filter(p => p.is_pending) || [])
     } catch (e) {
       console.error(e)
     } finally {
@@ -93,8 +97,30 @@ export default function AdminDashboard() {
     finally { setActionLoading(null) }
   }
 
+  const approveAccount = async (profile) => {
+    setActionLoading(profile.id)
+    try {
+      await supabase.from('profiles')
+        .update({ is_pending: false, is_active: true })
+        .eq('id', profile.id)
+      await load()
+    } catch (e) { console.error(e) }
+    finally { setActionLoading(null) }
+  }
+
+  const rejectAccount = async (profile) => {
+    setActionLoading(profile.id + '_reject')
+    try {
+      await supabase.from('profiles').delete().eq('id', profile.id)
+      await supabase.auth.admin?.deleteUser(profile.id).catch(() => {})
+      await load()
+    } catch (e) { console.error(e) }
+    finally { setActionLoading(null) }
+  }
+
   const tabs = [
     { key: 'overview', label: 'Overview' },
+    { key: 'approvals', label: `Approvals${pendingAccounts.length ? ` (${pendingAccounts.length})` : ''}` },
     { key: 'units', label: 'Units' },
     { key: 'audit', label: 'Audit Log' },
     { key: 'accounts', label: 'Accounts' },
@@ -146,6 +172,51 @@ export default function AdminDashboard() {
                   </button>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* PENDING APPROVALS */}
+          {tab === 'approvals' && (
+            <div className="space-y-2">
+              <p className="text-xs text-slate-500 px-1">{pendingAccounts.length} account{pendingAccounts.length !== 1 ? 's' : ''} awaiting approval</p>
+              {pendingAccounts.length === 0 && (
+                <div className="text-center text-slate-400 py-12 space-y-2">
+                  <UserPlus size={32} className="mx-auto opacity-30" />
+                  <p className="text-sm">No pending approvals</p>
+                </div>
+              )}
+              {pendingAccounts.map(a => (
+                <div key={a.id} className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-sm font-bold shrink-0">
+                      {a.name?.[0]?.toUpperCase() || '?'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-slate-800 text-sm">{a.name}</div>
+                      <div className="text-xs text-slate-400">
+                        {a.phone ? `+${a.phone}` : '—'}
+                        {a.unit ? ` · Unit ${a.unit}` : ''}
+                        {' · '}<span className="capitalize">{a.role}</span>
+                        {' · '}Registered {timeAgo(a.created_at)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => approveAccount(a)}
+                      disabled={!!actionLoading}
+                      className="flex-1 flex items-center justify-center gap-1.5 text-sm font-medium py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition">
+                      {actionLoading === a.id ? '...' : <><UserCheck size={15} /> Approve</>}
+                    </button>
+                    <button
+                      onClick={() => rejectAccount(a)}
+                      disabled={!!actionLoading}
+                      className="flex-1 flex items-center justify-center gap-1.5 text-sm font-medium py-2 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 disabled:opacity-50 transition">
+                      {actionLoading === a.id + '_reject' ? '...' : <><XCircle size={15} /> Reject</>}
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 

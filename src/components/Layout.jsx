@@ -26,9 +26,17 @@ export default function Layout({ user, onLogout, children }) {
     { to: '/profile', icon: UserCircle, label: 'Profile' },
   ]
 
+  const navHouseholdAdmin = [
+    { to: '/', icon: Shield, label: 'Gate' },
+    { to: '/log', icon: List, label: 'Log' },
+    { to: '/unit', icon: Users, label: 'My Unit' },
+    { to: '/profile', icon: UserCircle, label: 'Profile' },
+  ]
+
   const nav =
     user.role === 'admin' ? navAdmin :
     user.role === 'security' ? navSecurity :
+    user.role === 'household_admin' ? navHouseholdAdmin :
     navResident
 
   return (

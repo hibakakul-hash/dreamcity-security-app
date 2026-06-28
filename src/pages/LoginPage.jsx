@@ -1,12 +1,12 @@
-import { useState } from 'react'
-import { Shield, ArrowLeft, Phone, Mail } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Shield, ArrowLeft, Mail } from 'lucide-react'
 import {
   signInWithPhone,
   signUpWithPhone,
-  signInWithRecoveryEmail,
   sendPasswordResetByPhone,
   sendPasswordResetByEmail,
 } from '../lib/auth'
+import { supabase } from '../lib/supabase'
 
 const MODES = { login: 'login', signup: 'signup', forgot: 'forgot', recovery: 'recovery' }
 
@@ -21,6 +21,14 @@ export default function LoginPage({ onLogin }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [residents, setResidents] = useState([])
+  const [submitted, setSubmitted] = useState(false)
+
+  useEffect(() => {
+    supabase.from('residents').select('unit, name').order('unit').then(({ data }) => {
+      if (data) setResidents(data)
+    })
+  }, [])
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
   const reset = (m) => { setMode(m); setError(''); setSuccess('') }
@@ -41,15 +49,18 @@ export default function LoginPage({ onLogin }) {
       } else if (mode === MODES.signup) {
         if (form.password !== form.confirmPassword) throw new Error('Passwords do not match')
         if (form.password.length < 6) throw new Error('Password must be at least 6 characters')
-        const user = await signUpWithPhone({
+        if ((form.role === 'resident' || form.role === 'household_admin') && !form.unit)
+          throw new Error('Please select a unit')
+        await signUpWithPhone({
           phone: fullPhone,
           password: form.password,
           name: form.name,
           role: form.role,
-          unit: form.role === 'resident' ? form.unit : null,
+          unit: (form.role === 'resident' || form.role === 'household_admin') ? form.unit : null,
           recoveryEmail: form.recoveryEmail || null,
         })
-        onLogin(user)
+        setSubmitted(true)
+        return
 
       } else if (mode === MODES.forgot) {
         await sendPasswordResetByPhone(fullForgotPhone)
@@ -118,6 +129,26 @@ export default function LoginPage({ onLogin }) {
     )
   }
 
+  // ── Submitted / Pending screen ─────────────────────────────────────────────
+  if (submitted) {
+    return (
+      <Wrapper>
+        <div className="text-center space-y-4">
+          <div className="text-5xl">⏳</div>
+          <h2 className="font-bold text-slate-800 text-lg">Account Submitted</h2>
+          <p className="text-slate-500 text-sm">
+            Your account is awaiting approval from the society admin and your household admin.
+            You'll be able to sign in once it's approved.
+          </p>
+          <button onClick={() => { setSubmitted(false); setMode(MODES.login) }}
+            className="text-sm text-blue-600 hover:underline">
+            Back to Sign In
+          </button>
+        </div>
+      </Wrapper>
+    )
+  }
+
   // ── Login / Signup screens ─────────────────────────────────────────────────
   return (
     <Wrapper>
@@ -141,17 +172,23 @@ export default function LoginPage({ onLogin }) {
             </Field>
 
             <Field label="Role">
-              <select value={form.role} onChange={(e) => set('role', e.target.value)} className={inputCls}>
+              <select value={form.role} onChange={(e) => { set('role', e.target.value); set('unit', '') }} className={inputCls}>
                 <option value="resident">Resident</option>
+                <option value="household_admin">Household Admin</option>
                 <option value="security">Security Guard</option>
               </select>
             </Field>
 
-            {form.role === 'resident' && (
+            {(form.role === 'resident' || form.role === 'household_admin') && (
               <Field label="Unit / Flat" required>
-                <input type="text" value={form.unit}
-                  onChange={(e) => set('unit', e.target.value.toUpperCase())}
-                  placeholder="e.g. A-201" className={inputCls} required />
+                <select value={form.unit} onChange={(e) => set('unit', e.target.value)} className={inputCls} required>
+                  <option value="">— Select your unit —</option>
+                  {residents.map((r) => (
+                    <option key={r.unit} value={r.unit}>
+                      {r.unit}{r.name ? ` · ${r.name}` : ''}
+                    </option>
+                  ))}
+                </select>
               </Field>
             )}
           </>

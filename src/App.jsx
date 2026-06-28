@@ -12,6 +12,7 @@ import AddVisitor from './pages/AddVisitor'
 import PlateLookup from './pages/PlateLookup'
 import MyVehicles from './pages/MyVehicles'
 import ProfileSettings from './pages/ProfileSettings'
+import HouseholdAdminPanel from './pages/HouseholdAdminPanel'
 import { supabase } from './lib/supabase'
 import { getProfile, signOut } from './lib/auth'
 
@@ -25,6 +26,12 @@ export default function App() {
   const loadProfile = async (authUser) => {
     try {
       const p = await getProfile(authUser.id)
+      if (p && p.is_pending) {
+        await signOut()
+        setUser(null)
+        setProfile({ _pending: true })
+        return
+      }
       if (p && p.is_active === false) {
         await signOut()
         setUser(null)
@@ -85,6 +92,19 @@ export default function App() {
     return <LoginPage onLogin={handleLogin} />
   }
 
+  if (profile._pending) {
+    return (
+      <div className="min-h-screen bg-blue-900 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center space-y-3">
+          <div className="text-4xl">⏳</div>
+          <h2 className="font-bold text-slate-800 text-lg">Awaiting Approval</h2>
+          <p className="text-slate-500 text-sm">Your account is pending approval from the society admin and your household admin. Please check back later.</p>
+          <button onClick={handleLogout} className="text-sm text-blue-600 hover:underline">Sign out</button>
+        </div>
+      </div>
+    )
+  }
+
   if (profile._suspended) {
     return (
       <div className="min-h-screen bg-blue-900 flex items-center justify-center p-4">
@@ -102,15 +122,16 @@ export default function App() {
     <BrowserRouter>
       <Layout user={profile} onLogout={handleLogout}>
         <Routes>
-          {profile.role === 'security' || profile.role === 'admin' ? (
+          {profile.role === 'security' || profile.role === 'admin' || profile.role === 'household_admin' ? (
             <>
               <Route path="/" element={<SecurityGate user={profile} />} />
-              <Route path="/add-visitor" element={<AddVisitor user={profile} />} />
-              <Route path="/plate" element={<PlateLookup />} />
+              {(profile.role === 'security' || profile.role === 'admin') && <Route path="/add-visitor" element={<AddVisitor user={profile} />} />}
+              {(profile.role === 'security' || profile.role === 'admin') && <Route path="/plate" element={<PlateLookup />} />}
               <Route path="/log" element={<VisitorLog />} />
               <Route path="/profile" element={<ProfileSettings user={profile} onProfileUpdate={setProfile} />} />
               {profile.role === 'admin' && <Route path="/admin" element={<AdminDashboard />} />}
               {profile.role === 'admin' && <Route path="/admin/residents" element={<AdminPanel />} />}
+              {profile.role === 'household_admin' && <Route path="/unit" element={<HouseholdAdminPanel user={profile} />} />}
             </>
           ) : (
             <>
