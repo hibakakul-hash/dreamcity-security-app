@@ -1,15 +1,28 @@
 import { useState } from 'react'
-import { Shield, ArrowLeft } from 'lucide-react'
-import { signIn, signUp, sendPasswordReset } from '../lib/auth'
+import { Shield, ArrowLeft, Phone, Mail } from 'lucide-react'
+import {
+  signInWithPhone,
+  signUpWithPhone,
+  signInWithRecoveryEmail,
+  sendPasswordResetByPhone,
+  sendPasswordResetByEmail,
+} from '../lib/auth'
+
+const MODES = { login: 'login', signup: 'signup', forgot: 'forgot', recovery: 'recovery' }
 
 export default function LoginPage({ onLogin }) {
-  const [mode, setMode] = useState('login') // 'login' | 'signup' | 'forgot'
-  const [form, setForm] = useState({ email: '', password: '', name: '', unit: '', role: 'resident' })
+  const [mode, setMode] = useState(MODES.login)
+  const [form, setForm] = useState({
+    phone: '', password: '', confirmPassword: '',
+    name: '', unit: '', role: 'resident',
+    recoveryEmail: '', forgotPhone: '', forgotEmail: '',
+  })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+  const reset = (m) => { setMode(m); setError(''); setSuccess('') }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -17,20 +30,30 @@ export default function LoginPage({ onLogin }) {
     setSuccess('')
     setLoading(true)
     try {
-      if (mode === 'forgot') {
-        await sendPasswordReset(form.email)
-        setSuccess('Password reset link sent! Check your email.')
-      } else if (mode === 'login') {
-        const user = await signIn(form.email, form.password)
+      if (mode === MODES.login) {
+        const user = await signInWithPhone(form.phone, form.password)
         onLogin(user)
-      } else {
-        const meta = {
+
+      } else if (mode === MODES.signup) {
+        if (form.password !== form.confirmPassword) throw new Error('Passwords do not match')
+        if (form.password.length < 6) throw new Error('Password must be at least 6 characters')
+        const user = await signUpWithPhone({
+          phone: form.phone,
+          password: form.password,
           name: form.name,
           role: form.role,
           unit: form.role === 'resident' ? form.unit : null,
-        }
-        const user = await signUp(form.email, form.password, meta)
+          recoveryEmail: form.recoveryEmail || null,
+        })
         onLogin(user)
+
+      } else if (mode === MODES.forgot) {
+        await sendPasswordResetByPhone(form.forgotPhone)
+        setSuccess('Reset link sent! Check your recovery email.')
+
+      } else if (mode === MODES.recovery) {
+        await sendPasswordResetByEmail(form.forgotEmail)
+        setSuccess('Reset link sent to your recovery email.')
       }
     } catch (err) {
       setError(err.message)
@@ -39,6 +62,142 @@ export default function LoginPage({ onLogin }) {
     }
   }
 
+  // ── Forgot / Recovery screens ──────────────────────────────────────────────
+  if (mode === MODES.forgot || mode === MODES.recovery) {
+    return (
+      <Wrapper>
+        <button onClick={() => reset(MODES.login)} className="flex items-center gap-1 text-sm text-slate-500 hover:text-blue-600 mb-4 transition">
+          <ArrowLeft size={15} /> Back to Sign In
+        </button>
+
+        <h2 className="font-semibold text-slate-700 mb-1">
+          {mode === MODES.forgot ? 'Reset via Phone Number' : 'Reset via Recovery Email'}
+        </h2>
+        <p className="text-sm text-slate-500 mb-5">
+          {mode === MODES.forgot
+            ? 'Enter your registered phone number. A reset link will go to your recovery email.'
+            : "Enter the recovery email you set up when registering."}
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {mode === MODES.forgot ? (
+            <PhoneInput value={form.forgotPhone} onChange={(v) => set('forgotPhone', v)} />
+          ) : (
+            <EmailInput
+              label="Recovery Email"
+              value={form.forgotEmail}
+              onChange={(v) => set('forgotEmail', v)}
+              placeholder="your.backup@email.com"
+            />
+          )}
+
+          {error && <ErrorBox>{error}</ErrorBox>}
+          {success && <SuccessBox>{success}</SuccessBox>}
+
+          <Btn loading={loading} disabled={!!success}>
+            {mode === MODES.forgot ? 'Send Reset Link' : 'Send via Recovery Email'}
+          </Btn>
+
+          {mode === MODES.forgot && (
+            <button type="button" onClick={() => reset(MODES.recovery)}
+              className="w-full text-sm text-slate-500 hover:text-blue-600 transition text-center">
+              Lost your phone number? Use recovery email instead
+            </button>
+          )}
+        </form>
+      </Wrapper>
+    )
+  }
+
+  // ── Login / Signup screens ─────────────────────────────────────────────────
+  return (
+    <Wrapper>
+      <div className="flex bg-slate-100 rounded-xl p-1 mb-6">
+        {[MODES.login, MODES.signup].map((m) => (
+          <button key={m} onClick={() => reset(m)}
+            className={`flex-1 py-1.5 rounded-lg text-sm font-medium transition ${
+              mode === m ? 'bg-white text-blue-700 shadow' : 'text-slate-500 hover:text-slate-700'
+            }`}>
+            {m === MODES.login ? 'Sign In' : 'Register'}
+          </button>
+        ))}
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {mode === MODES.signup && (
+          <>
+            <Field label="Full Name" required>
+              <input type="text" value={form.name} onChange={(e) => set('name', e.target.value)}
+                placeholder="e.g. Sara Ali" className={inputCls} required />
+            </Field>
+
+            <Field label="Role">
+              <select value={form.role} onChange={(e) => set('role', e.target.value)} className={inputCls}>
+                <option value="resident">Resident</option>
+                <option value="security">Security Guard</option>
+              </select>
+            </Field>
+
+            {form.role === 'resident' && (
+              <Field label="Unit / Flat" required>
+                <input type="text" value={form.unit}
+                  onChange={(e) => set('unit', e.target.value.toUpperCase())}
+                  placeholder="e.g. A-201" className={inputCls} required />
+              </Field>
+            )}
+          </>
+        )}
+
+        <PhoneInput value={form.phone} onChange={(v) => set('phone', v)} required />
+
+        <Field label="Password" required>
+          <input type="password" value={form.password} onChange={(e) => set('password', e.target.value)}
+            placeholder="••••••••" className={inputCls} required minLength={6} />
+        </Field>
+
+        {mode === MODES.signup && (
+          <>
+            <Field label="Confirm Password" required>
+              <input type="password" value={form.confirmPassword}
+                onChange={(e) => set('confirmPassword', e.target.value)}
+                placeholder="••••••••" className={inputCls} required minLength={6} />
+            </Field>
+
+            <EmailInput
+              label={<>Recovery Email <span className="text-slate-400 font-normal">(optional but recommended)</span></>}
+              value={form.recoveryEmail}
+              onChange={(v) => set('recoveryEmail', v)}
+              placeholder="backup@email.com"
+              required={false}
+            />
+            <p className="text-xs text-slate-400 -mt-2">
+              Used to recover your account if you lose your phone number.
+            </p>
+          </>
+        )}
+
+        {error && <ErrorBox>{error}</ErrorBox>}
+
+        <Btn loading={loading}>
+          {mode === MODES.login ? 'Sign In' : 'Create Account'}
+        </Btn>
+
+        {mode === MODES.login && (
+          <button type="button" onClick={() => reset(MODES.forgot)}
+            className="w-full text-sm text-blue-600 hover:text-blue-800 transition text-center">
+            Forgot password?
+          </button>
+        )}
+      </form>
+    </Wrapper>
+  )
+}
+
+// ── Shared sub-components ──────────────────────────────────────────────────
+
+const inputCls = 'w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+
+function Wrapper({ children }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8">
@@ -49,144 +208,74 @@ export default function LoginPage({ onLogin }) {
           <h1 className="text-2xl font-bold text-slate-800">Dreamcity</h1>
           <p className="text-slate-500 text-sm mt-1">Society Gate Security</p>
         </div>
-
-        {mode === 'forgot' ? (
-          <>
-            <button
-              onClick={() => { setMode('login'); setError(''); setSuccess('') }}
-              className="flex items-center gap-1 text-sm text-slate-500 hover:text-blue-600 mb-4 transition"
-            >
-              <ArrowLeft size={15} /> Back to Sign In
-            </button>
-            <h2 className="font-semibold text-slate-700 mb-1">Reset Password</h2>
-            <p className="text-sm text-slate-500 mb-5">
-              Enter your email and we'll send a reset link.
-            </p>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => set('email', e.target.value)}
-                placeholder="you@example.com"
-                className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-              {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-              {success && <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">{success}</p>}
-              <button
-                type="submit"
-                disabled={loading || !!success}
-                className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition shadow"
-              >
-                {loading ? 'Sending...' : 'Send Reset Link'}
-              </button>
-            </form>
-          </>
-        ) : (
-          <>
-            <div className="flex bg-slate-100 rounded-xl p-1 mb-6">
-              {['login', 'signup'].map((m) => (
-                <button
-                  key={m}
-                  onClick={() => { setMode(m); setError('') }}
-                  className={`flex-1 py-1.5 rounded-lg text-sm font-medium transition ${
-                    mode === m ? 'bg-white text-blue-700 shadow' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  {m === 'login' ? 'Sign In' : 'Register'}
-                </button>
-              ))}
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {mode === 'signup' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-                    <input
-                      type="text"
-                      value={form.name}
-                      onChange={(e) => set('name', e.target.value)}
-                      placeholder="e.g. Sara Ali"
-                      className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
-                    <select
-                      value={form.role}
-                      onChange={(e) => set('role', e.target.value)}
-                      className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="resident">Resident</option>
-                      <option value="security">Security Guard</option>
-                    </select>
-                  </div>
-                  {form.role === 'resident' && (
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">Unit / Flat</label>
-                      <input
-                        type="text"
-                        value={form.unit}
-                        onChange={(e) => set('unit', e.target.value.toUpperCase())}
-                        placeholder="e.g. A-201"
-                        className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
-                      />
-                    </div>
-                  )}
-                </>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => set('email', e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
-                <input
-                  type="password"
-                  value={form.password}
-                  onChange={(e) => set('password', e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                  minLength={6}
-                />
-              </div>
-
-              {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition shadow"
-              >
-                {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Account'}
-              </button>
-
-              {mode === 'login' && (
-                <button
-                  type="button"
-                  onClick={() => { setMode('forgot'); setError('') }}
-                  className="w-full text-sm text-blue-600 hover:text-blue-800 transition text-center"
-                >
-                  Forgot password?
-                </button>
-              )}
-            </form>
-          </>
-        )}
+        {children}
       </div>
     </div>
   )
+}
+
+function Field({ label, required, children }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700 mb-1">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+function PhoneInput({ value, onChange, required }) {
+  return (
+    <Field label="Mobile Number" required={required}>
+      <div className="flex gap-2">
+        <span className="flex items-center px-3 bg-slate-100 border border-slate-300 rounded-xl text-sm text-slate-600 shrink-0">
+          <Phone size={14} className="mr-1" /> +92
+        </span>
+        <input
+          type="tel"
+          value={value}
+          onChange={(e) => onChange(e.target.value.replace(/\D/g, '').slice(0, 11))}
+          placeholder="03001234567"
+          className={inputCls}
+          required={required}
+        />
+      </div>
+    </Field>
+  )
+}
+
+function EmailInput({ label, value, onChange, placeholder, required }) {
+  return (
+    <Field label={label} required={required}>
+      <div className="relative">
+        <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          type="email"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={`${inputCls} pl-9`}
+          required={required}
+        />
+      </div>
+    </Field>
+  )
+}
+
+function Btn({ children, loading, disabled }) {
+  return (
+    <button type="submit" disabled={loading || disabled}
+      className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition shadow">
+      {loading ? 'Please wait...' : children}
+    </button>
+  )
+}
+
+function ErrorBox({ children }) {
+  return <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{children}</p>
+}
+
+function SuccessBox({ children }) {
+  return <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">{children}</p>
 }
