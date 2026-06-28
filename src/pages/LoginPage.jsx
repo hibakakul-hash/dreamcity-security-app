@@ -52,6 +52,21 @@ export default function LoginPage({ onLogin }) {
         if (form.password.length < 6) throw new Error('Password must be at least 6 characters')
         if ((form.role === 'resident' || form.role === 'household_admin') && !form.unit)
           throw new Error('Please select a unit')
+
+        if (form.role === 'household_admin') {
+          const { data: existing } = await supabase
+            .from('profiles')
+            .select('id, name, is_active, is_pending')
+            .eq('unit', form.unit)
+            .eq('role', 'household_admin')
+          const active = existing?.find(p => p.is_active || p.is_pending)
+          if (active) {
+            throw new Error(
+              `Unit ${form.unit} already has a Household Admin${active.name ? ` (${active.name})` : ''}. ` +
+              'Contact the society admin to reassign this role.'
+            )
+          }
+        }
         await signUpWithPhone({
           phone: fullPhone,
           password: form.password,
