@@ -7,6 +7,7 @@ import SecurityGate from './pages/SecurityGate'
 import VisitorLog from './pages/VisitorLog'
 import ResidentPortal from './pages/ResidentPortal'
 import AdminPanel from './pages/AdminPanel'
+import AdminDashboard from './pages/AdminDashboard'
 import AddVisitor from './pages/AddVisitor'
 import PlateLookup from './pages/PlateLookup'
 import MyVehicles from './pages/MyVehicles'
@@ -24,6 +25,12 @@ export default function App() {
   const loadProfile = async (authUser) => {
     try {
       const p = await getProfile(authUser.id)
+      if (p && p.is_active === false) {
+        await signOut()
+        setUser(null)
+        setProfile({ _suspended: true })
+        return
+      }
       setProfile(p)
     } catch {
       setProfile(null)
@@ -78,6 +85,19 @@ export default function App() {
     return <LoginPage onLogin={handleLogin} />
   }
 
+  if (profile._suspended) {
+    return (
+      <div className="min-h-screen bg-blue-900 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center space-y-3">
+          <div className="text-4xl">🚫</div>
+          <h2 className="font-bold text-slate-800 text-lg">Account Suspended</h2>
+          <p className="text-slate-500 text-sm">Your account has been suspended by the admin. Please contact the society management.</p>
+          <button onClick={handleLogout} className="text-sm text-blue-600 hover:underline">Sign out</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <BrowserRouter>
       <Layout user={profile} onLogout={handleLogout}>
@@ -89,7 +109,8 @@ export default function App() {
               <Route path="/plate" element={<PlateLookup />} />
               <Route path="/log" element={<VisitorLog />} />
               <Route path="/profile" element={<ProfileSettings user={profile} onProfileUpdate={setProfile} />} />
-              {profile.role === 'admin' && <Route path="/admin" element={<AdminPanel />} />}
+              {profile.role === 'admin' && <Route path="/admin" element={<AdminDashboard />} />}
+              {profile.role === 'admin' && <Route path="/admin/residents" element={<AdminPanel />} />}
             </>
           ) : (
             <>

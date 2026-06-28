@@ -7,11 +7,11 @@ import { mockVisitors } from '../lib/mockData'
 const DEMO_MODE = !import.meta.env.VITE_SUPABASE_URL
 
 const PURPOSE_COLORS = {
-  Guest: 'bg-purple-100 text-purple-700',
+  Guest:    'bg-purple-100 text-purple-700',
   Delivery: 'bg-yellow-100 text-yellow-700',
-  Family: 'bg-green-100 text-green-700',
-  Service: 'bg-orange-100 text-orange-700',
-  Other: 'bg-slate-100 text-slate-600',
+  Family:   'bg-green-100 text-green-700',
+  Service:  'bg-orange-100 text-orange-700',
+  Other:    'bg-slate-100 text-slate-600',
 }
 
 function timeAgo(iso) {
@@ -21,7 +21,7 @@ function timeAgo(iso) {
   return `${Math.floor(diff / 60)}h ago`
 }
 
-export default function SecurityGate() {
+export default function SecurityGate({ user }) {
   const [visitors, setVisitors] = useState(DEMO_MODE ? mockVisitors : [])
   const [filter, setFilter] = useState('pending')
   const [loading, setLoading] = useState(!DEMO_MODE)
@@ -31,18 +31,15 @@ export default function SecurityGate() {
     try {
       const data = await fetchVisitors()
       setVisitors(data)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoading(false)
-    }
+    } catch (e) { console.error(e) }
+    finally { setLoading(false) }
   }
 
   useEffect(() => {
     load()
     if (DEMO_MODE) return
     const channel = supabase
-      .channel('visitors')
+      .channel('visitors-gate')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'visitors' }, load)
       .subscribe()
     return () => supabase.removeChannel(channel)
@@ -50,13 +47,20 @@ export default function SecurityGate() {
 
   const handleStatus = async (id, status) => {
     if (DEMO_MODE) {
-      setVisitors((prev) =>
-        prev.map((v) => v.id === id ? { ...v, status, approved_at: new Date().toISOString() } : v)
-      )
+      setVisitors((prev) => prev.map((v) =>
+        v.id === id ? { ...v, status, decided_by_name: user.name, approved_at: new Date().toISOString() } : v
+      ))
       return
     }
-    await updateVisitorStatus(id, status)
-    load()
+    try {
+      await updateVisitorStatus(id, status, user.name)
+      load()
+    } catch (e) {
+      if (e.message?.includes('Already decided')) {
+        alert(`This request was already decided. Refreshing...`)
+        load()
+      }
+    }
   }
 
   const filtered = visitors.filter((v) => filter === 'all' || v.status === filter)
@@ -74,9 +78,6 @@ export default function SecurityGate() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {DEMO_MODE && (
-            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">Demo</span>
-          )}
           {pendingCount > 0 && (
             <span className="bg-red-500 text-white text-sm font-bold rounded-full w-7 h-7 flex items-center justify-center">
               {pendingCount}
@@ -97,36 +98,26 @@ export default function SecurityGate() {
           { key: 'denied', label: 'Denied' },
           { key: 'all', label: 'All' },
         ].map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setFilter(key)}
+          <button key={key} onClick={() => setFilter(key)}
             className={`flex-1 py-1.5 rounded-lg text-sm font-medium transition ${
               filter === key ? 'bg-white text-blue-700 shadow' : 'text-slate-600 hover:text-slate-800'
-            }`}
-          >
+            }`}>
             {label}
           </button>
         ))}
       </div>
 
       <div className="space-y-3">
-        {loading && (
-          <div className="text-center text-slate-400 py-12">Loading visitors...</div>
-        )}
+        {loading && <div className="text-center text-slate-400 py-12">Loading visitors...</div>}
         {!loading && filtered.length === 0 && (
-          <div className="text-center text-slate-400 py-12">
-            No {filter === 'all' ? '' : filter} visitors
-          </div>
+          <div className="text-center text-slate-400 py-12">No {filter === 'all' ? '' : filter} visitors</div>
         )}
         {filtered.map((v) => (
-          <div
-            key={v.id}
-            className={`bg-white rounded-2xl shadow-sm border-l-4 p-4 ${
-              v.status === 'pending' ? 'border-amber-400'
-              : v.status === 'approved' ? 'border-green-500'
-              : 'border-red-400'
-            }`}
-          >
+          <div key={v.id} className={`bg-white rounded-2xl shadow-sm border-l-4 p-4 ${
+            v.status === 'pending' ? 'border-amber-400'
+            : v.status === 'approved' ? 'border-green-500'
+            : 'border-red-400'
+          }`}>
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -150,22 +141,24 @@ export default function SecurityGate() {
                     <Clock size={14} className="text-slate-400" />
                     {timeAgo(v.created_at)}
                   </div>
+                  {v.status !== 'pending' && v.decided_by_name && (
+                    <div className="text-xs text-slate-400 italic">
+                      {v.status === 'approved' ? 'Allowed' : 'Denied'} by {v.decided_by_name}
+                      {v.approved_at ? ` · ${timeAgo(v.approved_at)}` : ''}
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div className="flex flex-col items-end gap-2 shrink-0">
                 {v.status === 'pending' ? (
                   <>
-                    <button
-                      onClick={() => handleStatus(v.id, 'approved')}
-                      className="flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition"
-                    >
+                    <button onClick={() => handleStatus(v.id, 'approved')}
+                      className="flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition">
                       <CheckCircle size={16} /> Allow
                     </button>
-                    <button
-                      onClick={() => handleStatus(v.id, 'denied')}
-                      className="flex items-center gap-1 bg-red-500 hover:bg-red-600 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition"
-                    >
+                    <button onClick={() => handleStatus(v.id, 'denied')}
+                      className="flex items-center gap-1 bg-red-500 hover:bg-red-600 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition">
                       <XCircle size={16} /> Deny
                     </button>
                   </>

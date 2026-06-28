@@ -18,12 +18,16 @@ export async function addVisitor(visitor) {
   return data
 }
 
-export async function updateVisitorStatus(id, status) {
+export async function updateVisitorStatus(id, status, decidedByName) {
   const { error } = await supabase
     .from('visitors')
-    .update({ status, approved_at: status !== 'pending' ? new Date().toISOString() : null })
+    .update({
+      status,
+      decided_by_name: decidedByName || null,
+      approved_at: status !== 'pending' ? new Date().toISOString() : null,
+    })
     .eq('id', id)
-  if (error) throw error
+  if (error) throw new Error(error.message)
 }
 
 // Pre-approvals
