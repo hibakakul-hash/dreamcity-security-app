@@ -9,9 +9,12 @@ insert into residents (name, unit, phone) values
   ('Dr Mohammad Irfan', 'H2/57', null)
 on conflict (unit) do update set name = excluded.name;
 
--- 2. Add is_pending to profiles (new accounts start pending until approved)
+-- 2. Add is_pending and must_change_password to profiles
 alter table profiles
   add column if not exists is_pending boolean not null default false;
+
+alter table profiles
+  add column if not exists must_change_password boolean not null default false;
 
 -- 3. Update role constraint to include household_admin
 alter table profiles

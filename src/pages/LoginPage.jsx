@@ -1,27 +1,19 @@
 import { useState, useEffect } from 'react'
-import { Shield, ArrowLeft, Mail } from 'lucide-react'
-import {
-  signInWithPhone,
-  signUpWithPhone,
-  signInWithRecoveryEmail,
-  sendPasswordResetByPhone,
-  sendPasswordResetByEmail,
-} from '../lib/auth'
+import { Shield, ArrowLeft } from 'lucide-react'
+import { signInWithPhone, signUpWithPhone } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 
-const MODES = { login: 'login', signup: 'signup', forgot: 'forgot', recovery: 'recovery', emailLogin: 'emailLogin' }
+const MODES = { login: 'login', signup: 'signup', forgot: 'forgot' }
 
 export default function LoginPage({ onLogin }) {
   const [mode, setMode] = useState(MODES.login)
   const [form, setForm] = useState({
     phone: '', password: '', confirmPassword: '',
     name: '', unit: '', role: 'resident',
-    recoveryEmail: '', forgotPhone: '', forgotEmail: '',
-    countryCode: '91', forgotCountryCode: '91',
+    countryCode: '91',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [residents, setResidents] = useState([])
   const [submitted, setSubmitted] = useState(false)
 
@@ -32,16 +24,14 @@ export default function LoginPage({ onLogin }) {
   }, [])
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
-  const reset = (m) => { setMode(m); setError(''); setSuccess('') }
+  const reset = (m) => { setMode(m); setError('') }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
-    setSuccess('')
     setLoading(true)
     try {
       const fullPhone = form.countryCode + form.phone.replace(/^0+/, '')
-      const fullForgotPhone = form.forgotCountryCode + form.forgotPhone.replace(/^0+/, '')
 
       if (mode === MODES.login) {
         const user = await signInWithPhone(fullPhone, form.password)
@@ -67,28 +57,17 @@ export default function LoginPage({ onLogin }) {
             )
           }
         }
+
         await signUpWithPhone({
           phone: fullPhone,
           password: form.password,
           name: form.name,
           role: form.role,
           unit: (form.role === 'resident' || form.role === 'household_admin') ? form.unit : null,
-          recoveryEmail: form.recoveryEmail || null,
+          recoveryEmail: null,
         })
         setSubmitted(true)
         return
-
-      } else if (mode === MODES.forgot) {
-        await sendPasswordResetByPhone(fullForgotPhone)
-        setSuccess('Reset link sent! Check your recovery email.')
-
-      } else if (mode === MODES.recovery) {
-        await sendPasswordResetByEmail(form.forgotEmail)
-        setSuccess('Reset link sent to your recovery email.')
-
-      } else if (mode === MODES.emailLogin) {
-        const user = await signInWithRecoveryEmail(form.forgotEmail, form.password)
-        onLogin(user)
       }
     } catch (err) {
       setError(err.message)
@@ -97,90 +76,43 @@ export default function LoginPage({ onLogin }) {
     }
   }
 
-  // ── Forgot / Recovery / Email Login screens ───────────────────────────────
-  if (mode === MODES.forgot || mode === MODES.recovery || mode === MODES.emailLogin) {
-    const isEmailLogin = mode === MODES.emailLogin
-
+  // ── Forgot password screen ─────────────────────────────────────────────────
+  if (mode === MODES.forgot) {
     return (
       <Wrapper>
-        <button onClick={() => reset(MODES.login)} className="flex items-center gap-1 text-sm text-slate-500 hover:text-blue-600 mb-4 transition">
+        <button onClick={() => reset(MODES.login)} className="flex items-center gap-1 text-sm text-slate-500 hover:text-blue-600 mb-6 transition">
           <ArrowLeft size={15} /> Back to Sign In
         </button>
-
-        <h2 className="font-semibold text-slate-700 mb-1">
-          {mode === MODES.forgot ? 'Reset via Phone Number'
-            : mode === MODES.emailLogin ? 'Sign in with Recovery Email'
-            : 'Reset via Recovery Email'}
-        </h2>
-        <p className="text-sm text-slate-500 mb-5">
-          {mode === MODES.forgot
-            ? 'Enter your registered phone number. A reset link will go to your recovery email.'
-            : mode === MODES.emailLogin
-            ? 'Use your recovery email and password to sign in if you no longer have access to your phone number.'
-            : 'Enter the recovery email you set up when registering.'}
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === MODES.forgot ? (
-            <PhoneInput
-              value={form.forgotPhone}
-              onChange={(v) => set('forgotPhone', v)}
-              countryCode={form.forgotCountryCode}
-              onCountryChange={(v) => set('forgotCountryCode', v)}
-            />
-          ) : (
-            <EmailInput
-              label="Recovery Email"
-              value={form.forgotEmail}
-              onChange={(v) => set('forgotEmail', v)}
-              placeholder="your.backup@email.com"
-            />
-          )}
-
-          {isEmailLogin && (
-            <Field label="Password" required>
-              <input type="password" value={form.password}
-                onChange={(e) => set('password', e.target.value)}
-                placeholder="••••••••" className={inputCls} required minLength={6} />
-            </Field>
-          )}
-
-          {error && <ErrorBox>{error}</ErrorBox>}
-          {success && <SuccessBox>{success}</SuccessBox>}
-
-          <Btn loading={loading} disabled={!!success}>
-            {mode === MODES.forgot ? 'Send Reset Link'
-              : mode === MODES.emailLogin ? 'Sign In'
-              : 'Send via Recovery Email'}
-          </Btn>
-
-          {mode === MODES.forgot && (
-            <>
-              <button type="button" onClick={() => reset(MODES.emailLogin)}
-                className="w-full text-sm text-slate-500 hover:text-blue-600 transition text-center">
-                Have your recovery email? Sign in directly →
-              </button>
-              <button type="button" onClick={() => reset(MODES.recovery)}
-                className="w-full text-sm text-slate-400 hover:text-slate-600 transition text-center">
-                Forgot password? Reset via recovery email
-              </button>
-            </>
-          )}
-        </form>
+        <div className="text-center space-y-4">
+          <div className="text-4xl">🔑</div>
+          <h2 className="font-semibold text-slate-700">Forgot Password?</h2>
+          <p className="text-sm text-slate-500">
+            Contact your <strong>Household Admin</strong> to reset your password.
+            They can generate a temporary password for you from their panel.
+          </p>
+          <p className="text-sm text-slate-500">
+            Once you receive the temporary password, sign in and you'll be prompted to set a new one.
+          </p>
+          <p className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-2">
+            If you are the Household Admin, contact the <strong>Society Admin (SuperAdmin)</strong> for assistance.
+          </p>
+        </div>
       </Wrapper>
     )
   }
 
   // ── Submitted / Pending screen ─────────────────────────────────────────────
   if (submitted) {
+    const isResident = form.role === 'resident'
     return (
       <Wrapper>
         <div className="text-center space-y-4">
           <div className="text-5xl">⏳</div>
           <h2 className="font-bold text-slate-800 text-lg">Account Submitted</h2>
           <p className="text-slate-500 text-sm">
-            Your account is awaiting approval from the society admin and your household admin.
-            You'll be able to sign in once it's approved.
+            {isResident
+              ? 'Your account is awaiting approval from your Household Admin. You\'ll be able to sign in once approved.'
+              : 'Your account is awaiting approval from the Society Admin. You\'ll be able to sign in once approved.'}
           </p>
           <button onClick={() => { setSubmitted(false); setMode(MODES.login) }}
             className="text-sm text-blue-600 hover:underline">
@@ -250,24 +182,11 @@ export default function LoginPage({ onLogin }) {
         </Field>
 
         {mode === MODES.signup && (
-          <>
-            <Field label="Confirm Password" required>
-              <input type="password" value={form.confirmPassword}
-                onChange={(e) => set('confirmPassword', e.target.value)}
-                placeholder="••••••••" className={inputCls} required minLength={6} />
-            </Field>
-
-            <EmailInput
-              label={<>Recovery Email <span className="text-slate-400 font-normal">(optional but recommended)</span></>}
-              value={form.recoveryEmail}
-              onChange={(v) => set('recoveryEmail', v)}
-              placeholder="backup@email.com"
-              required={false}
-            />
-            <p className="text-xs text-slate-400 -mt-2">
-              Used to recover your account if you lose your phone number.
-            </p>
-          </>
+          <Field label="Confirm Password" required>
+            <input type="password" value={form.confirmPassword}
+              onChange={(e) => set('confirmPassword', e.target.value)}
+              placeholder="••••••••" className={inputCls} required minLength={6} />
+          </Field>
         )}
 
         {error && <ErrorBox>{error}</ErrorBox>}
@@ -277,16 +196,10 @@ export default function LoginPage({ onLogin }) {
         </Btn>
 
         {mode === MODES.login && (
-          <>
-            <button type="button" onClick={() => reset(MODES.forgot)}
-              className="w-full text-sm text-blue-600 hover:text-blue-800 transition text-center">
-              Forgot password?
-            </button>
-            <button type="button" onClick={() => reset(MODES.emailLogin)}
-              className="w-full text-sm text-slate-400 hover:text-slate-600 transition text-center">
-              Lost your phone number? Sign in with recovery email
-            </button>
-          </>
+          <button type="button" onClick={() => reset(MODES.forgot)}
+            className="w-full text-sm text-blue-600 hover:text-blue-800 transition text-center">
+            Forgot password?
+          </button>
         )}
       </form>
     </Wrapper>
@@ -363,24 +276,6 @@ function PhoneInput({ value, onChange, countryCode, onCountryChange, required })
   )
 }
 
-function EmailInput({ label, value, onChange, placeholder, required }) {
-  return (
-    <Field label={label} required={required}>
-      <div className="relative">
-        <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input
-          type="email"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className={`${inputCls} pl-9`}
-          required={required}
-        />
-      </div>
-    </Field>
-  )
-}
-
 function Btn({ children, loading, disabled }) {
   return (
     <button type="submit" disabled={loading || disabled}
@@ -392,8 +287,4 @@ function Btn({ children, loading, disabled }) {
 
 function ErrorBox({ children }) {
   return <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{children}</p>
-}
-
-function SuccessBox({ children }) {
-  return <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">{children}</p>
 }

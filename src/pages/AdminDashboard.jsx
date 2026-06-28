@@ -75,8 +75,8 @@ export default function AdminDashboard() {
       // All accounts
       setAccounts(profiles || [])
 
-      // Pending approval accounts
-      setPendingAccounts(profiles?.filter(p => p.is_pending) || [])
+      // Pending approval accounts — residents are approved by HA, not SuperAdmin
+      setPendingAccounts(profiles?.filter(p => p.is_pending && p.role !== 'resident') || [])
     } catch (e) {
       console.error(e)
     } finally {
